@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "partitions": [
-    {
-      "path": "src",
-      "target": "roblox"
-    }
-  ]
-}
