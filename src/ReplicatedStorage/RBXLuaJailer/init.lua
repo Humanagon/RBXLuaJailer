@@ -1,34 +1,5 @@
 --RBXLuaJailer by Humanagon, 2025.
 --[[
-	BSD 3-Clause License
-
-	Copyright (c) 2026, Humanagon
-
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions are met:
-
-	1. Redistributions of source code must retain the above copyright notice, this
-	   list of conditions and the following disclaimer.
-
-	2. Redistributions in binary form must reproduce the above copyright notice,
-	   this list of conditions and the following disclaimer in the documentation
-	   and/or other materials provided with the distribution.
-
-	3. Neither the name of the copyright holder nor the names of its
-	   contributors may be used to endorse or promote products derived from
-	   this software without specific prior written permission.
-
-	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-	AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-	IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-	DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-	FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-	DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-	SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-	CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-	OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 	Thank you for using RBXLuaJailer!
 	
 	This module is designed to make it easy for you to create a safe environment for user submitted code. It it works by replacing every
@@ -58,11 +29,8 @@ local default_plugins = require(default_module_settings:WaitForChild("Plugins"))
 table.freeze(default_settings)
 table.freeze(default_plugins)
 
-local scripts = {}
-
 main_module.constants = table.freeze(constants)
 main_module.enum = table.freeze(enum)
-main_module.scripts = table.freeze(scripts)
 
 for i = 1, #default_wrappersc do
 	default_wrappers[default_wrappersc[i].Name] = require(default_wrappersc[i])
@@ -271,7 +239,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	local plugins = module_settings:FindFirstChild("Plugins") or default_plugins
 	local env = require(module_settings:FindFirstChild("Environment") or default_env)
 	local local_default_aliases = {}
-	local module_settings_settings = module_settings:FindFirstChild("Settings")
+	local msettings = module_settings:FindFirstChild("Settings")
 	local data_type_wrappers = {}
 	local dth = module_settings:FindFirstChild("DataTypes")
 	if dth then
@@ -293,27 +261,47 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	table.freeze(module.permissions)
 
-	if module_settings_settings then
-		module_settings_settings = require(module_settings_settings)
+	if msettings then
+		msettings = require(msettings)
 		for k, v in pairs(default_settings) do
-			if type(module_settings_settings[k]) == "nil" then
-				module_settings_settings[k] = default_settings[k]
+			if type(msettings[k]) == "nil" then
+				msettings[k] = default_settings[k]
 			end
 		end
-		if module_settings_settings ~= default_settings then
+		if msettings ~= default_settings then
 			pcall(function()
-				table.freeze(module_settings_settings)
+				table.freeze(msettings)
 			end)
 		end
 	else
-		module_settings_settings = default_settings
+		msettings = default_settings
 	end
 
-	if module_settings_settings.WrapperDataType ~= "table" and module_settings_settings.WrapperDataType ~= "userdata" then
+	if msettings.WrapperDataType ~= "table" and msettings.WrapperDataType ~= "userdata" then
 		error("Invalid settings: WrapperDataType can only be either \"table\" or \"userdata\"", 0)
 	end
 
-	module.settings = module_settings_settings
+	module.settings = msettings
+	
+	local proxy_dict = nil
+	if type(msettings.ProxyDictionarySharedKey) == "string" then
+		if type(shared[msettings.ProxyDictionarySharedKey]) ~= "table" then
+			proxy_dict = setmetatable({}, {__mode = "kv"})
+			shared[msettings.ProxyDictionarySharedKey] = proxy_dict
+		else
+			proxy_dict = shared[msettings.ProxyDictionarySharedKey]
+		end
+	end
+	local schema_dict = nil
+	if type(msettings.SchemaDictionarySharedKey) == "string" then
+		if type(shared[msettings.SchemaDictionarySharedKey]) ~= "table" then
+			schema_dict = setmetatable({}, {__mode = "kv"})
+			shared[msettings.SchemaDictionarySharedKey] = schema_dict
+		else
+			schema_dict = shared[msettings.SchemaDictionarySharedKey]
+		end
+	end
+	local api_enabled = not msettings.DisableAPIFunctions
 
 	--The metatables with the "kv" mode mean that both the keys nor the values will prevent the garabage collector from cleaning up when necessary.
 	local storage = {
@@ -379,7 +367,6 @@ function main_module.CreateModule(config, name, level, permissions)
 	module.constants = constants
 	module.enum = enum
 	module.plugins = plugins
-	module.scripts = scripts
 
 	module.whitelist = {
 		services = require(whitelists:FindFirstChild("AllowedServices") or default_whitelists:WaitForChild("AllowedServices")),
@@ -435,27 +422,29 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	local function IndexWrapper(this, wrapper, inst, key)
 		--Wrapper API functions
-		if key == "GetWrapperObject" then
-			--Always use this to get the real instance of a wrapper.
-			--The reason you must pass in an instance to this function is to ensure that no wrapped script can access it.
-			--This security works 100% of the time since wrapped scripts will never have access to a real instance. (Unless the user accidentally returns one in a custom method, property, etc. PLEASE AVOID DOING THIS!)
-			return function(verification)
-				if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
-					return inst
+		if api_enabled then
+			if key == "GetWrapperObject" then
+				--Always use this to get the real instance of a wrapper.
+				--The reason you must pass in an instance to this function is to ensure that no wrapped script can access it.
+				--This security works 100% of the time since wrapped scripts will never have access to a real instance. (Unless the user accidentally returns one in a custom method, property, etc. PLEASE AVOID DOING THIS!)
+				return function(verification)
+					if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+						return inst
+					end
 				end
-			end
-		elseif key == "GetWrapperTable" then
-			--Used to get the table of defined properties, methods, and events.
-			--The module can also be accessed by using this, which can be used to check context levels, use plugins, etc.
-			return function(verification)
-				if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
-					return wrapper
+			elseif key == "GetWrapperTable" then
+				--Used to get the table of defined properties, methods, and events.
+				--The module can also be accessed by using this, which can be used to check context levels, use plugins, etc.
+				return function(verification)
+					if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+						return wrapper
+					end
 				end
 			end
 		end
 
 		--Instance handling
-		local required = inst:GetAttribute(module.settings.RequiredPermissionAttribute)
+		local required = inst:GetAttribute(msettings.RequiredPermissionAttribute)
 		if type(required) == "string" and not module.permissions[required] then
 			error("Error: Permission " .. required .. " is required to index this Instance", 0)
 		elseif wrapper.dict[key] then
@@ -469,7 +458,7 @@ function main_module.CreateModule(config, name, level, permissions)
 				return wrapper.dict[key].reference
 			elseif wrapper.dict[key].type == enum.instance.members.custom_properties then
 				if wrapper.dict[key].reference.read then
-					if module.settings.AutoWrapCustomMembers then
+					if msettings.AutoWrapCustomMembers then
 						return module.Wrap(wrapper.dict[key].reference.read(this))
 					else
 						return wrapper.dict[key].reference.read(this)
@@ -480,7 +469,7 @@ function main_module.CreateModule(config, name, level, permissions)
 					error("Unable to read property " .. key, 0)
 				end
 			elseif wrapper.dict[key].type == enum.instance.members.attribute_properties then
-				local property = inst:GetAttribute(module.settings.AttributePropertyPrefix .. key)
+				local property = inst:GetAttribute(msettings.AttributePropertyPrefix .. key)
 				if typeof(property) == "nil" then
 					if wrapper.dict[key].reference.strict then
 						error("The " .. key .. " property of " .. wrapper.values.class_name .. " \"" .. inst.Name .. "\" is locked", 0)
@@ -522,7 +511,7 @@ function main_module.CreateModule(config, name, level, permissions)
 					if type(storage.Events[inst]) ~= "table" then
 						storage.Events[inst] = setmetatable({}, {__mode = "kv"})
 					end
-					if module.settings.AutoWrapCustomMembers then
+					if msettings.AutoWrapCustomMembers then
 						storage.Events[inst][key] = module.Wrap(wrapper.dict[key].reference(this))
 					else
 						storage.Events[inst][key] = wrapper.dict[key].reference(this)
@@ -569,7 +558,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	local function NewIndexWrapper(this, wrapper, inst, key, value)
 		if wrapper.dict[key] then
 			local value_type = module.typeof(value)
-			local required = inst:GetAttribute(module.settings.RequiredPermissionAttribute)
+			local required = inst:GetAttribute(msettings.RequiredPermissionAttribute)
 			if type(required) == "string" and not module.permissions[required] then
 				error("Error: Permission " .. required .. " is required to index this Instance", 0)
 			elseif wrapper.dict[key].type == enum.instance.members.properties or wrapper.dict[key].type == enum.instance.members.write_only_properties then
@@ -577,9 +566,9 @@ function main_module.CreateModule(config, name, level, permissions)
 				if data_type_wrappers[v] and data_type_wrappers[v].verify then
 					data_type_wrappers[v].verify(GetProperty(inst, key), module.Unwrap(value))
 				end
-				if typeof(value) == module.settings.WrapperDataType and getmetatable(value) == constants.InstanceIdentifier then
+				if typeof(value) == msettings.WrapperDataType and getmetatable(value) == constants.InstanceIdentifier then
 					SetProperty(inst, key, value.GetWrapperObject(script))
-				elseif typeof(value) == module.settings.WrapperDataType and module.GetCustomType(value) then
+				elseif typeof(value) == msettings.WrapperDataType and module.GetCustomType(value) then
 					SetProperty(inst, key, value.GetWrapperObject(script))
 				else
 					SetProperty(inst, key, value)
@@ -606,10 +595,10 @@ function main_module.CreateModule(config, name, level, permissions)
 					error("Unable to assign callback " .. key .. ". Function expected, got " .. value_type, 0)
 				end
 			elseif wrapper.dict[key].type == enum.instance.members.attribute_properties then
-				if typeof(inst:GetAttribute(module.settings.AttributePropertyPrefix .. key)) == "nil" and wrapper.dict[key].reference.strict then
+				if typeof(inst:GetAttribute(msettings.AttributePropertyPrefix .. key)) == "nil" and wrapper.dict[key].reference.strict then
 					error("The " .. key .. " property of " .. wrapper.values.class_name .. " \"" .. inst.Name .. "\" is locked", 0)
 				elseif value_type == wrapper.dict[key].reference.type or (wrapper.dict[key].reference.type == "any" and enum.attribute.types[value_type]) then
-					inst:SetAttribute(module.settings.AttributePropertyPrefix .. key, value)
+					inst:SetAttribute(msettings.AttributePropertyPrefix .. key, value)
 				else
 					error("Unable to assign property " .. key .. ". " .. wrapper.dict[key].reference.type .. " expected, got " .. value_type, 0)
 				end
@@ -632,7 +621,7 @@ function main_module.CreateModule(config, name, level, permissions)
 						error("Internal error. Unable to locate " .. wrapper.dict[key].reference, 0)
 					end
 				end
-				if typeof(value) == module.settings.WrapperDataType and getmetatable(value) == constants.InstanceIdentifier then
+				if typeof(value) == msettings.WrapperDataType and getmetatable(value) == constants.InstanceIdentifier then
 					tinst[arr[#arr]] = value.GetWrapperObject(script)
 				else
 					tinst[arr[#arr]] = value
@@ -640,14 +629,14 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 			return true
 		else
-			error(key .. " is not a valid member of " .. (module.settings.CustomClassAttribute and inst:GetAttribute(module.settings.CustomClassAttribute) or inst.ClassName) .. " \"" .. inst.Name .. "\"", 0)
+			error(key .. " is not a valid member of " .. (msettings.CustomClassAttribute and inst:GetAttribute(msettings.CustomClassAttribute) or inst.ClassName) .. " \"" .. inst.Name .. "\"", 0)
 		end
 	end
 
 	function module.Execute(str, passed_env, is_compiled)
 		--This will only work if LoadStringEnabled is true in the ServerScriptService, but is faster than using a lua compiler.
 		local loadstringenabled = false
-		if module.settings.UseLoadStringIfAvailable then
+		if msettings.UseLoadStringIfAvailable then
 			loadstringenabled = pcall(function()
 				loadstring("local a = 1")()
 			end)
@@ -681,7 +670,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	function module.CreateExecutable(str, passed_env, is_compiled)
 		--This will only work if LoadStringEnabled is true in the ServerScriptService, but is faster than using a lua compiler.
 		local loadstringenabled = false
-		if module.settings.UseLoadStringIfAvailable then
+		if msettings.UseLoadStringIfAvailable then
 			loadstringenabled = pcall(function()
 				loadstring("local a = 1")()
 			end)
@@ -802,7 +791,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	end
 
 	local function IndexEvent(inst, key)
-		if key == "GetWrapperObject" then
+		if key == "GetWrapperObject" and api_enabled then
 			--Use this to get the real event of a wrapper.
 			return function(verification)
 				if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
@@ -852,7 +841,7 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 		end
 		local wrapper = constants.RootClass and wrappers[constants.RootClass]
-		local cn = inst:GetAttribute(module.settings.CustomClassAttribute)
+		local cn = inst:GetAttribute(msettings.CustomClassAttribute)
 		if typeof(cn) ~= "string" then
 			cn = inst.ClassName
 		end
@@ -934,7 +923,7 @@ function main_module.CreateModule(config, name, level, permissions)
 									if not storage.Schemas[lcn] or (lcn ~= class_name and not table.find(storage.Schemas[lcn].values.inherits_from, class_name)) then
 										error(invalid_method_self, 0)
 									end
-									if module.settings.AutoWrapCustomMembers then
+									if msettings.AutoWrapCustomMembers then
 										return module.Wrap(temp_wrapper[properties_string][key](...))
 									else
 										return temp_wrapper[properties_string][key](...)
@@ -1043,12 +1032,19 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	function module.Wrap(inst, table_cache)
 		local value_type = typeof(inst)
+		if proxy_dict and proxy_dict[inst] and value_type == msettings.WrapperDataType then
+			return inst
+		end
 		local metatable = getmetatable(inst)
 		local cust = type(inst) .. ":" .. value_type
 		if cust and data_type_wrappers and data_type_wrappers[cust] and data_type_wrappers[cust].wrap then
-			return data_type_wrappers[cust].wrap(inst)
+			local t = data_type_wrappers[cust].wrap(inst)
+			if proxy_dict then
+				proxy_dict[t] = inst
+			end
+			return t
 		elseif value_type == "Instance" then
-			if inst:HasTag(constants.LockedTag) or inst:HasTag(constants.HiddenTag) or (type(module.settings.WhitelistedTag) == "string" and not inst:HasTag(module.settings.WhitelistedTag)) then
+			if inst:HasTag(constants.LockedTag) or inst:HasTag(constants.HiddenTag) or (type(msettings.WhitelistedTag) == "string" and not inst:HasTag(msettings.WhitelistedTag)) then
 				--error("Fatal error: " .. inst.Name .. " is restricted.", 0)
 				--Return nil because sometimes the Player is nil in Studio.
 				return nil
@@ -1065,12 +1061,12 @@ function main_module.CreateModule(config, name, level, permissions)
 			local wrapper = CreateInstanceWrapper(inst)
 			local t = nil
 			local m = nil
-			if module.settings.WrapperDataType == "table" then
+			if msettings.WrapperDataType == "table" then
 				t = {}
 				m = {}
 				setmetatable(t, m)
 				m.__eq = TableEqualHandler
-			elseif module.settings.WrapperDataType == "userdata" then
+			elseif msettings.WrapperDataType == "userdata" then
 				t = newproxy(true)
 				m = getmetatable(t)
 				m.__eq = UserDataEqualHandler
@@ -1100,6 +1096,12 @@ function main_module.CreateModule(config, name, level, permissions)
 				end
 			end
 			storage.Instances[inst] = t
+			if proxy_dict then
+				proxy_dict[t] = inst
+			end
+			if schema_dict then
+				schema_dict[t] = wrapper
+			end
 			return t
 		elseif value_type == "RBXScriptSignal" then
 			local t = nil
@@ -1107,12 +1109,12 @@ function main_module.CreateModule(config, name, level, permissions)
 			if storage.EventWrappers[inst] then
 				return storage.EventWrappers[inst]
 			end
-			if module.settings.WrapperDataType == "table" then
+			if msettings.WrapperDataType == "table" then
 				t = {}
 				m = {}
 				setmetatable(t, m)
 				m.__eq = TableEqualHandler
-			elseif module.settings.WrapperDataType == "userdata" then
+			elseif msettings.WrapperDataType == "userdata" then
 				t = newproxy(true)
 				m = getmetatable(t)
 				m.__eq = UserDataEqualHandler
@@ -1129,6 +1131,9 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 			m.__metatable = constants.EventIdentifier
 			storage.EventWrappers[inst] = t
+			if proxy_dict then
+				proxy_dict[t] = inst
+			end
 			return t
 		elseif value_type == "function" then
 			if storage.Functions[inst] then
@@ -1136,12 +1141,12 @@ function main_module.CreateModule(config, name, level, permissions)
 			else
 				local t = nil
 				local m = nil
-				if module.settings.WrapperDataType == "table" then
+				if msettings.WrapperDataType == "table" then
 					t = {}
 					m = {}
 					setmetatable(t, m)
 					m.__eq = TableEqualHandler
-				elseif module.settings.WrapperDataType == "userdata" then
+				elseif msettings.WrapperDataType == "userdata" then
 					t = newproxy(true)
 					m = getmetatable(t)
 					m.__eq = UserDataEqualHandler
@@ -1149,17 +1154,21 @@ function main_module.CreateModule(config, name, level, permissions)
 				m.__call = function(_, ...)
 					return module.CreateWrapperFunctionTunnel(inst, ...)
 				end
-				m.__index = function(this, key)
-					if key == "GetWrapperObject" then
-						--Use this to get the real function of a wrapper.
-						return function(verification)
-							if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
-								return inst
+				if api_enabled then
+					m.__index = function(this, key)
+						if key == "GetWrapperObject" and not msettings.DisableAPIFunctions then
+							--Use this to get the real function of a wrapper.
+							return function(verification)
+								if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+									return inst
+								end
 							end
+						else
+							FunctionIndexCallback(this, key)
 						end
-					else
-						FunctionIndexCallback(this, key)
 					end
+				else
+					m.__index = FunctionIndexCallback
 				end
 				m.__newindex = FunctionIndexCallback
 				m.__tostring = function()
@@ -1170,9 +1179,12 @@ function main_module.CreateModule(config, name, level, permissions)
 				end
 				m.__metatable = constants.FunctionIdentifier
 				storage.Functions[inst] = t
-				return storage.Functions[inst]
+				if proxy_dict then
+					proxy_dict[t] = inst
+				end
+				return t
 			end
-		elseif value_type == "table" and (module.settings.WrapperDataType ~= "table" or (metatable ~= constants.InstanceIdentifier and metatable ~= constants.EventIdentifier and metatable ~= constants.FunctionIdentifier or string.sub(metatable, 1, #module.settings.CustomTypePrefix) == module.settings.CustomTypePrefix)) then
+		elseif value_type == "table" and (msettings.WrapperDataType ~= "table" or (metatable ~= constants.InstanceIdentifier and metatable ~= constants.EventIdentifier and metatable ~= constants.FunctionIdentifier or string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix)) then
 			if type(table_cache) == "table" and table_cache[inst] then
 				--print("circular table detected >:(")
 				return table_cache[inst]
@@ -1200,8 +1212,8 @@ function main_module.CreateModule(config, name, level, permissions)
 	function module.Unwrap(t, reverse_wrap_functions, table_cache)
 		local value_type = typeof(t)
 		local metatable = getmetatable(t)
-		if value_type == module.settings.WrapperDataType and (metatable == constants.InstanceIdentifier or metatable == constants.EventIdentifier or metatable == constants.FunctionIdentifier or string.sub(metatable, 1, #module.settings.CustomTypePrefix) == module.settings.CustomTypePrefix) and t.GetWrapperObject then
-			return t.GetWrapperObject(script)
+		if value_type == msettings.WrapperDataType and (metatable == constants.InstanceIdentifier or metatable == constants.EventIdentifier or metatable == constants.FunctionIdentifier or string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix) and t.GetWrapperObject then
+			return proxy_dict and proxy_dict[t] or api_enabled and t.GetWrapperObject(script)
 		elseif value_type == "table" then
 			if type(getmetatable(t)) ~= "nil" then
 				--Security against malicious user-created metatables.
@@ -1229,8 +1241,8 @@ function main_module.CreateModule(config, name, level, permissions)
 			return t2
 		elseif value_type == "function" and reverse_wrap_functions then
 			return module.ReverseWrap(t)
-		elseif value_type == module.settings.WrapperDataType and module.GetCustomType(t) then
-			return t.GetWrapperObject(script)
+		elseif value_type == msettings.WrapperDataType and module.GetCustomType(t) then
+			return proxy_dict and proxy_dict[t] or api_enabled and t.GetWrapperObject(script)
 		else
 			return t
 		end
@@ -1258,7 +1270,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	end
 
 	function module.UnwrapIfWrapped(t)
-		if typeof(t) == module.settings.WrapperDataType then
+		if typeof(t) == msettings.WrapperDataType then
 			local metatable = getmetatable(t)
 			if module.CheckIfWrapped(t) then
 				return t.GetWrapperObject(script)
@@ -1271,9 +1283,9 @@ function main_module.CreateModule(config, name, level, permissions)
 	end
 
 	function module.CheckIfWrapped(t)
-		if typeof(t) == module.settings.WrapperDataType then
+		if typeof(t) == msettings.WrapperDataType then
 			local metatable = getmetatable(t)
-			if (metatable == constants.InstanceIdentifier or metatable == constants.EventIdentifier or metatable == constants.FunctionIdentifier or string.sub(metatable, 1, #module.settings.CustomTypePrefix) == module.settings.CustomTypePrefix) and t.GetWrapperObject then
+			if (metatable == constants.InstanceIdentifier or metatable == constants.EventIdentifier or metatable == constants.FunctionIdentifier or string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix) and t.GetWrapperObject then
 				return true
 			end
 		end
@@ -1281,9 +1293,9 @@ function main_module.CreateModule(config, name, level, permissions)
 	end
 
 	function module.GetCustomType(t)
-		if typeof(t) == module.settings.WrapperDataType then
+		if typeof(t) == msettings.WrapperDataType then
 			local metatable = getmetatable(t)
-			if string.sub(metatable, 1, #module.settings.CustomTypePrefix) == module.settings.CustomTypePrefix then
+			if string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
 				local parts = string.split(metatable, ":")
 				if parts[2] and parts[3] then
 					return parts[2] .. ":" .. parts[3]
@@ -1302,7 +1314,7 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	function module.typeof(obj)
 		local value_type = typeof(obj)
-		if value_type == module.settings.WrapperDataType then
+		if value_type == msettings.WrapperDataType then
 			local metatable = getmetatable(obj)
 			if type(metatable) == "string" then
 				if metatable == module.constants.InstanceIdentifier then
@@ -1311,7 +1323,7 @@ function main_module.CreateModule(config, name, level, permissions)
 					value_type = "RBXScriptSignal"
 				elseif metatable == module.constants.FunctionIdentifier then
 					value_type = "function"
-				elseif string.sub(metatable, 1, #module.settings.CustomTypePrefix) == module.settings.CustomTypePrefix then
+				elseif string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
 					value_type = string.split(metatable, ":")[3]
 				end
 			end
@@ -1321,14 +1333,14 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	function module.type(obj)
 		local value_type = type(obj)
-		if value_type == module.settings.WrapperDataType then
+		if value_type == msettings.WrapperDataType then
 			local metatable = getmetatable(obj)
 			if type(metatable) == "string" then
 				if metatable == module.constants.InstanceIdentifier or metatable == module.constants.EventIdentifier then
 					value_type = "userdata"
 				elseif metatable == module.constants.FunctionIdentifier then
 					value_type = "function"
-				elseif string.sub(metatable, 1, #module.settings.CustomTypePrefix) == module.settings.CustomTypePrefix then
+				elseif string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
 					value_type = string.split(metatable, ":")[2]
 				end
 			end
