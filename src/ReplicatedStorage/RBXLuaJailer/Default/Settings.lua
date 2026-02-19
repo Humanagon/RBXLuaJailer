@@ -9,5 +9,8 @@ return {
 	WhitelistedTag = nil, --If set to a string, all instances must have the string as a tag in order to be wrapped and used, or otherwise causing an error if they lack it.
 	UseLoadStringIfAvailable = false, --Weather or not to use loadstring. It's generally recommended to have this set to false since real loadstring can't have built-in anti Instance security like a module interpreter can.
 	RequiredPermissionAttribute = "RBXLJA_RequiredPermisson", --Required permission to index members.
-	AutoWrapCustomMembers = true --Forces all custom class members to be wrapped. If true, method returns will be auto wrapped, as well as custom events and properties.
+	AutoWrapCustomMembers = true, --Forces all custom class members to be wrapped. If true, method returns will be auto wrapped, as well as custom events and properties.
+	ProxyDictionarySharedKey = "RLJProxyDict", --If set to a string, all wrapper proxies (table or userdata) will be added to a dictionary in the shared table which points to the real instance/function/event/datatype.
+	SchemaDictionarySharedKey = "RLJSchemaDict", --Same as ProxyDictionarySharedKey, but for GetWrapperTable.
+	DisableAPIFunctions = false --Disables GetWrapperObject and GetWrapperTable. Useful for when ProxyDictionarySharedKey is enabled.
 }
