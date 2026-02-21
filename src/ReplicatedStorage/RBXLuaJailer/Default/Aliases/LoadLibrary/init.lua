@@ -12,32 +12,35 @@ for i = 1, #children do
 end
 
 return function(module)
-	return function(str)
-		if not module.constants.AllowLoadLibrary then
-			return error("Sorry, but LoadLibrary is not enabled in this RBXLuaJailer distro. Enable by setting AllowLoadLibrary in RBXLuaJailer.Settings.Constants to true.", 0)
+	if not module.constants.AllowLoadLibrary then
+		return function()
+			error("Sorry, but LoadLibrary is not enabled in this RBXLuaJailer distro. Enable by setting AllowLoadLibrary in RBXLuaJailer.Settings.Constants to true.", 0)
 		end
-		local cached = cache[str]
-		if cached then
-			return cached
+	else
+		return function(str)
+			local cached = cache[str]
+			if cached then
+				return cached
+			end
+			local exists = libraries[str]
+			if not exists then
+				return nil, "Unknown library " .. str
+			end
+			local t = exists(module)
+			local proxy = newproxy(true)
+			local m = getmetatable(proxy)
+			m.__index = function(_, key)
+				return t[key]
+			end
+			m.__newindex = function(_, key, value)
+				error(key .. " cannot be assigned to", 0)
+			end
+			m.__metatable = "The metatable is locked"
+			m.__tostring = function()
+				return str
+			end
+			cache[str] = proxy
+			return proxy
 		end
-		local exists = libraries[str]
-		if not exists then
-			return nil, "Unknown library " .. str
-		end
-		local t = exists(module)
-		local proxy = newproxy(true)
-		local m = getmetatable(proxy)
-		m.__index = function(_, key)
-			return t[key]
-		end
-		m.__newindex = function(_, key, value)
-			error(key .. " cannot be assigned to", 0)
-		end
-		m.__metatable = "The metatable is locked"
-		m.__tostring = function()
-			return str
-		end
-		cache[str] = proxy
-		return proxy
 	end
 end
