@@ -1,6 +1,11 @@
+--Update: Now guards libraries with a userdata proxy to prevent altering of the tables. (Just like real LoadLibrary did!)
+local getmetatable = getmetatable
+local error = error
+local newproxy = newproxy
 local library = script:WaitForChild("LoadLibrary")
 local children = library:GetChildren()
 local libraries = {}
+local cache = {}
 
 for i = 1, #children do
 	libraries[children[i].Name] = require(children[i])
@@ -11,10 +16,28 @@ return function(module)
 		if not module.constants.AllowLoadLibrary then
 			return error("Sorry, but LoadLibrary is not enabled in this RBXLuaJailer distro. Enable by setting AllowLoadLibrary in RBXLuaJailer.Settings.Constants to true.", 0)
 		end
+		local cached = cache[str]
+		if cached then
+			return cached
+		end
 		local exists = libraries[str]
 		if not exists then
-			return error("Sorry, but \"" .. str .. "\" is not a valid library.", 0)
+			return nil, "Unknown library " .. str
 		end
-		return exists(module)
+		local t = exists(module)
+		local proxy = newproxy(true)
+		local m = getmetatable(proxy)
+		m.__index = function(_, key)
+			return t[key]
+		end
+		m.__newindex = function(_, key, value)
+			error(key .. " cannot be assigned to", 0)
+		end
+		m.__metatable = "The metatable is locked"
+		m.__tostring = function()
+			return str
+		end
+		cache[str] = proxy
+		return proxy
 	end
 end
