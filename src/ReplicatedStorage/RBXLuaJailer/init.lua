@@ -747,7 +747,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	end
 
 	function module.MakeSecureEnv(sc) --The sc argument is for passing the current script so it can be wrapped. For those who wish to simulate script sources themselves.
-		local this_env = getfenv(0)
+		local this_env = getfenv(debug.info(2, "f"))
 		local ret = {}
 		local keys_to_secure = {}
 		for key, value in pairs(env) do
