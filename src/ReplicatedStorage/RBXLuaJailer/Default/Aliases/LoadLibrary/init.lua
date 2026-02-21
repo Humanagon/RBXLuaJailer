@@ -11,6 +11,9 @@ for i = 1, #children do
 	libraries[children[i].Name] = require(children[i])
 end
 
+table.clear(children)
+children = nil
+
 return function(module)
 	if not module.constants.AllowLoadLibrary then
 		return function()
