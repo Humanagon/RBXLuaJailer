@@ -38,6 +38,45 @@
 	In addition to making scripts safe, it also allows you to customize the roblox class hierarchy. This means you can virtually create your own engine features!
 --]]
 
+local script = script
+local require = require
+local ipairs = ipairs
+local pairs = pairs
+local type = type
+local shared = shared
+local loadstring = loadstring
+local setfenv = setfenv
+local getfenv = getfenv
+local pcall = pcall
+local error = error
+local typeof = typeof
+local setmetatable = setmetatable
+local getmetatable = getmetatable
+local tostring = tostring
+local warn = warn
+local newproxy = newproxy
+
+local table_freeze = table.freeze
+local table_pack = table.pack
+local table_unpack = unpack
+local table_clone = table.clone
+local table_insert = table.insert
+local table_clear = table.clear
+local string_split = string.split
+local string_sub = string.sub
+local debug_info = debug.info
+local os_clock = os.clock
+
+local AddTag = game.AddTag
+local RemoveTag = game.RemoveTag
+local HasTag = game.HasTag
+local GetAttribute = game.GetAttribute
+local SetAttribute = game.SetAttribute
+local IsA = game.IsA
+local GetChildren = game.GetChildren
+local GetDescendants = game.GetDescendants
+local Clone = game.Clone
+
 local main_module = {}
 local main = script
 local constants = require(main:WaitForChild("Constants"))
@@ -48,18 +87,24 @@ local default_module_settings = main:WaitForChild("Default")
 local default_settings = require(default_module_settings:WaitForChild("Settings"))
 local default_whitelists = default_module_settings:WaitForChild("Whitelists")
 local default_wrappers_folder = default_module_settings:WaitForChild("Wrappers")
-local default_aliasesc = default_module_settings:WaitForChild("Aliases"):GetChildren()
+local default_aliasesc = GetChildren(default_module_settings:WaitForChild("Aliases"))
 local default_aliases = {}
-local default_wrappersc = default_wrappers_folder:GetChildren()
+local default_wrappersc = GetChildren(default_wrappers_folder)
 local default_wrappers = {}
 local default_env = default_module_settings:WaitForChild("Environment")
 local default_plugins = require(default_module_settings:WaitForChild("Plugins"))
 
-table.freeze(default_settings)
-table.freeze(default_plugins)
+table_freeze(default_settings)
+table_freeze(default_plugins)
 
-main_module.constants = table.freeze(constants)
-main_module.enum = table.freeze(enum)
+main_module.constants = table_freeze(constants)
+main_module.enum = table_freeze(enum)
+
+local instance_identifier = constants.InstanceIdentifier
+local function_identifier = constants.FunctionIdentifier
+local event_identifier = constants.EventIdentifier
+local locked_tag = constants.LockedTag
+local hidden_tag = constants.HiddenTag
 
 for i = 1, #default_wrappersc do
 	default_wrappers[default_wrappersc[i].Name] = require(default_wrappersc[i])
@@ -69,14 +114,14 @@ for i = 1, #default_aliasesc do
 	default_aliases[default_aliasesc[i].Name] = require(default_aliasesc[i])
 end
 
-local default_wrapper_instances = table.clone(default_wrappers)
+local default_wrapper_instances = table_clone(default_wrappers)
 
 function main_module.Lock(inst, recursive)
 	if typeof(inst) == "Instance" then
-		inst:AddTag(constants.LockedTag)
+		AddTag(inst, locked_tag)
 		if recursive then
-			for i, desc in ipairs(inst:GetDescendants()) do
-				desc:AddTag(constants.LockedTag)
+			for i, desc in ipairs(GetDescendants(inst)) do
+				AddTag(desc, locked_tag)
 			end
 		end
 		return true
@@ -86,10 +131,10 @@ end
 
 function main_module.Unlock(inst, recursive)
 	if typeof(inst) == "Instance" then
-		inst:RemoveTag(constants.LockedTag)
+		RemoveTag(inst, locked_tag)
 		if recursive then
-			for i, desc in ipairs(inst:GetDescendants()) do
-				desc:RemoveTag(constants.LockedTag)
+			for i, desc in ipairs(GetDescendants(inst)) do
+				RemoveTag(desc, locked_tag)
 			end
 		end
 		return true
@@ -99,10 +144,10 @@ end
 
 function main_module.Hide(inst, recursive)
 	if typeof(inst) == "Instance" then
-		inst:AddTag(constants.HiddenTag)
+		AddTag(inst, hidden_tag)
 		if recursive then
-			for i, desc in ipairs(inst:GetDescendants()) do
-				desc:AddTag(constants.HiddenTag)
+			for i, desc in ipairs(GetDescendants(inst)) do
+				AddTag(desc, hidden_tag)
 			end
 		end
 		return true
@@ -112,10 +157,10 @@ end
 
 function main_module.Unhide(inst, recursive)
 	if typeof(inst) == "Instance" then
-		inst:RemoveTag(constants.HiddenTag)
+		RemoveTag(inst, hidden_tag)
 		if recursive then
-			for i, desc in ipairs(inst:GetDescendants()) do
-				desc:RemoveTag(constants.HiddenTag)
+			for i, desc in ipairs(GetDescendants(inst)) do
+				RemoveTag(desc, hidden_tag)
 			end
 		end
 		return true
@@ -129,10 +174,10 @@ end
 
 function main_module.SetCore(inst, recursive)
 	if typeof(inst) == "Instance" then
-		inst:AddTag(constants.CoreTag)
+		AddTag(inst, constants.CoreTag)
 		if recursive then
-			for i, desc in ipairs(inst:GetDescendants()) do
-				desc:AddTag(constants.CoreTag)
+			for i, desc in ipairs(GetDescendants(inst)) do
+				AddTag(desc, constants.CoreTag)
 			end
 		end
 		return true
@@ -142,10 +187,10 @@ end
 
 function main_module.UnsetCore(inst, recursive)
 	if typeof(inst) == "Instance" then
-		inst:RemoveTag(constants.CoreTag)
+		RemoveTag(inst, constants.CoreTag)
 		if recursive then
-			for i, desc in ipairs(inst:GetDescendants()) do
-				desc:RemoveTag(constants.CoreTag)
+			for i, desc in ipairs(GetDescendants(inst)) do
+				RemoveTag(desc, constants.CoreTag)
 			end
 		end
 		return true
@@ -155,28 +200,28 @@ end
 
 function main_module.IsLocked(inst)
 	if typeof(inst) == "Instance" then
-		return inst:HasTag(constants.LockedTag)
+		return HasTag(inst, locked_tag)
 	end
 	return false
 end
 
 function main_module.IsHidden(inst)
 	if typeof(inst) == "Instance" then
-		return inst:HasTag(constants.HiddenTag)
+		return HasTag(inst, hidden_tag)
 	end
 	return false
 end
 
 function main_module.IsCore(inst)
 	if typeof(inst) == "Instance" then
-		return inst:HasTag(constants.CoreTag)
+		return HasTag(inst, constants.CoreTag)
 	end
 	return false
 end
 
 function main_module.IsCoreScriptDisabled(inst)
 	if typeof(inst) == "Instance" then
-		return inst:HasTag(constants.CoreScriptDisabledTag)
+		return HasTag(inst, constants.CoreScriptDisabledTag)
 	end
 	return false
 end
@@ -187,7 +232,7 @@ function main_module.Disappear(handle)
 end
 
 function main_module.DisappearChildren(handle)
-	local handlec = handle:GetChildren()
+	local handlec = GetChildren(handle)
 	for i = 1, #handlec do
 		main_module.Disappear(handlec[i])
 	end
@@ -198,13 +243,14 @@ function main_module.PrepareCoreScripts(wrap, request)
 	local scripts = wrap:FindFirstChild("Scripts")
 	if not scripts then return nil end
 	local ret = {}
-	local children = scripts:GetChildren()
+	local children = GetChildren(scripts)
 	for i = 1, #children do
-		ret[children[i].Name] = children[i]:Clone()
-		if not ret[children[i].Name]:HasTag(constants.CoreScriptDisabledTag) then
-			ret[children[i].Name].Disabled = false
+		local child = children[i]
+		ret[child.Name] = Clone(child)
+		if not HasTag(ret[child.Name], constants.CoreScriptDisabledTag) then
+			ret[child.Name].Disabled = false
 		else
-			ret[children[i].Name]:RemoveTag(constants.CoreScriptDisabledTag)
+			RemoveTag(ret[child.Name], constants.CoreScriptDisabledTag)
 		end
 	end
 	return ret
@@ -224,6 +270,8 @@ function AssignToEvent(_, key, value)
 	error("Cannot assign to an event", 0)
 end
 
+local needs_equal_handler = not constants.UseSharedGlobal
+
 function main_module.CreateModule(config, name, level, permissions)
 	if type(name) ~= "string" then
 		name = "default"
@@ -232,17 +280,17 @@ function main_module.CreateModule(config, name, level, permissions)
 		level = 0
 	end
 	if type(permissions) ~= "table" then
-		permissions = table.freeze({})
+		permissions = table_freeze({})
 	else
 		local success = pcall(function()
-			table.freeze(permissions)
+			table_freeze(permissions)
 		end)
 		if not success then
-			permissions = table.freeze({})
+			permissions = table_freeze({})
 		end
 	end
 
-	local user_id = tonumber(string.split(name, ":")[2])
+	local user_id = tonumber(string_split(name, ":")[2])
 	if user_id and math.floor(user_id) ~= user_id then
 		user_id = nil
 	end
@@ -263,7 +311,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	local whitelists = module_settings:FindFirstChild("Whitelists") or default_whitelists
 	local aliasesc = default_aliasesc
 	local aliases = {}
-	local wrappersc = wrappers_folder:GetChildren()
+	local wrappersc = GetChildren(wrappers_folder)
 	local wrappers = {}
 	local plugins = module_settings:FindFirstChild("Plugins") or default_plugins
 	local env = require(module_settings:FindFirstChild("Environment") or default_env)
@@ -272,8 +320,8 @@ function main_module.CreateModule(config, name, level, permissions)
 	local data_type_wrappers = {}
 	local dth = module_settings:FindFirstChild("DataTypes")
 	if dth then
-		for i, v in ipairs(dth:GetChildren()) do
-			if v:IsA("ModuleScript") then
+		for i, v in ipairs(GetChildren(dth)) do
+			if IsA(v, "ModuleScript") then
 				data_type_wrappers[v.Name] = require(v)
 			end
 		end
@@ -288,7 +336,7 @@ function main_module.CreateModule(config, name, level, permissions)
 		module.permissions[v] = true
 	end
 
-	table.freeze(module.permissions)
+	table_freeze(module.permissions)
 
 	if msettings then
 		msettings = require(msettings)
@@ -299,7 +347,7 @@ function main_module.CreateModule(config, name, level, permissions)
 		end
 		if msettings ~= default_settings then
 			pcall(function()
-				table.freeze(msettings)
+				table_freeze(msettings)
 			end)
 		end
 	else
@@ -320,6 +368,8 @@ function main_module.CreateModule(config, name, level, permissions)
 		else
 			proxy_dict = shared[msettings.ProxyDictionarySharedKey]
 		end
+	else
+		proxy_dict = {}
 	end
 	local schema_dict = nil
 	if type(msettings.SchemaDictionarySharedKey) == "string" then
@@ -329,6 +379,8 @@ function main_module.CreateModule(config, name, level, permissions)
 		else
 			schema_dict = shared[msettings.SchemaDictionarySharedKey]
 		end
+	else
+		schema_dict = {}
 	end
 	local api_enabled = not msettings.DisableAPIFunctions
 
@@ -353,7 +405,7 @@ function main_module.CreateModule(config, name, level, permissions)
 	module.storage = {}
 
 	if module_settings:FindFirstChild("Aliases") then
-		aliasesc = module_settings.Aliases:GetChildren()
+		aliasesc = GetChildren(module_settings.Aliases)
 	else
 		aliases = local_default_aliases
 	end
@@ -389,9 +441,9 @@ function main_module.CreateModule(config, name, level, permissions)
 		end
 	end
 
-	local wrapper_instances = table.clone(wrappers)
+	local wrapper_instances = table_clone(wrappers)
 
-	table.freeze(wrapper_instances)
+	table_freeze(wrapper_instances)
 
 	module.constants = constants
 	module.enum = enum
@@ -406,31 +458,35 @@ function main_module.CreateModule(config, name, level, permissions)
 	local compiler = nil
 
 	if module.plugins then
-		if typeof(module.plugins.LuaInterpreter) == "Instance" and module.plugins.LuaInterpreter:IsA("ModuleScript") then
+		if typeof(module.plugins.LuaInterpreter) == "Instance" and IsA(module.plugins.LuaInterpreter, "ModuleScript") then
 			interpreter = require(module.plugins.LuaInterpreter)
 		end
-		if typeof(module.plugins.LuaCompiler) == "Instance" and module.plugins.LuaCompiler:IsA("ModuleScript") then
+		if typeof(module.plugins.LuaCompiler) == "Instance" and IsA(module.plugins.LuaCompiler, "ModuleScript") then
 			compiler = require(module.plugins.LuaCompiler)
 		end
 	end
+	
+	local Wrap = nil
+	local Unwrap = nil
 
 	local function CreateWrapperMethodTunnel(method, t, ...)
-		local inst = t.GetWrapperObject(script)
-		local args = table.pack(inst, ...)
+		local inst = proxy_dict[t] or t.GetWrapperObject(script)
+		local args = table_pack(inst, ...)
 		for i = 2, #args do
 			args[i] = module.Unwrap(args[i], true)
 		end
-		args = table.pack(inst[method](table.unpack(args)))
+		args = table_pack(inst[method](table_unpack(args)))
 		for i = 1, #args do
-			args[i] = module.Wrap(args[i])
+			args[i] = Wrap(args[i])
 		end
-		return table.unpack(args)
+		return table_unpack(args)
 	end
 
 	local GetProperty = nil
 	if plugins.Handler and plugins.Handler.GetProperty then
+		local GP = plugins.Handler.GetProperty
 		GetProperty = function(inst, key)
-			return plugins.Handler.GetProperty(inst, key, player)
+			return GP(inst, key, player)
 		end
 	else
 		GetProperty = function(inst, key)
@@ -440,8 +496,9 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	local GetMethod = nil
 	if plugins.Handler and plugins.Handler.GetMethod then
+		local GM = plugins.Handler.GetMethod
 		GetMethod = function(this, inst, key, wrapper)
-			return plugins.Handler.GetMethod(this, inst, key, player)
+			return GM(this, inst, key, player)
 		end
 	else
 		GetMethod = function(this, inst, key, wrapper)
@@ -457,7 +514,7 @@ function main_module.CreateModule(config, name, level, permissions)
 				--The reason you must pass in an instance to this function is to ensure that no wrapped script can access it.
 				--This security works 100% of the time since wrapped scripts will never have access to a real instance. (Unless the user accidentally returns one in a custom method, property, etc. PLEASE AVOID DOING THIS!)
 				return function(verification)
-					if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+					if typeof(verification) == "Instance" and IsA(verification, "LuaSourceContainer") then
 						return inst
 					end
 				end
@@ -465,7 +522,7 @@ function main_module.CreateModule(config, name, level, permissions)
 				--Used to get the table of defined properties, methods, and events.
 				--The module can also be accessed by using this, which can be used to check context levels, use plugins, etc.
 				return function(verification)
-					if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+					if typeof(verification) == "Instance" and IsA(verification, "LuaSourceContainer") then
 						return wrapper
 					end
 				end
@@ -473,12 +530,12 @@ function main_module.CreateModule(config, name, level, permissions)
 		end
 
 		--Instance handling
-		local required = inst:GetAttribute(msettings.RequiredPermissionAttribute)
+		local required = GetAttribute(inst, msettings.RequiredPermissionAttribute)
 		if type(required) == "string" and not module.permissions[required] then
 			error("Error: Permission " .. required .. " is required to index this Instance", 0)
 		elseif wrapper.dict[key] then
 			if wrapper.dict[key].type == enum.instance.members.properties or wrapper.dict[key].type == enum.instance.members.read_only_properties or wrapper.dict[key].type == enum.instance.members.events then
-				return module.Wrap(GetProperty(inst, key))
+				return Wrap(GetProperty(inst, key))
 			elseif wrapper.dict[key].type == enum.instance.members.write_only_properties then
 				error("Unable to read property " .. key .. ". Property is write only", 0)
 			elseif wrapper.dict[key].type == enum.instance.members.methods then
@@ -488,7 +545,7 @@ function main_module.CreateModule(config, name, level, permissions)
 			elseif wrapper.dict[key].type == enum.instance.members.custom_properties then
 				if wrapper.dict[key].reference.read then
 					if msettings.AutoWrapCustomMembers then
-						return module.Wrap(wrapper.dict[key].reference.read(this))
+						return Wrap(wrapper.dict[key].reference.read(this))
 					else
 						return wrapper.dict[key].reference.read(this)
 					end
@@ -498,7 +555,7 @@ function main_module.CreateModule(config, name, level, permissions)
 					error("Unable to read property " .. key, 0)
 				end
 			elseif wrapper.dict[key].type == enum.instance.members.attribute_properties then
-				local property = inst:GetAttribute(msettings.AttributePropertyPrefix .. key)
+				local property = GetAttribute(inst, msettings.AttributePropertyPrefix .. key)
 				if typeof(property) == "nil" then
 					if wrapper.dict[key].reference.strict then
 						error("The " .. key .. " property of " .. wrapper.values.class_name .. " \"" .. inst.Name .. "\" is locked", 0)
@@ -511,13 +568,13 @@ function main_module.CreateModule(config, name, level, permissions)
 				return property
 			elseif wrapper.dict[key].type == enum.instance.members.core_properties or wrapper.dict[key].type == enum.instance.members.read_only_core_properties or wrapper.dict[key].type == enum.instance.members.core_events then
 				--Deprecated.
-				local arr = string.split(wrapper.dict[key].reference, ".")
+				local arr = string_split(wrapper.dict[key].reference, ".")
 				local tinst = inst
 				for i = 1, #arr - 1 do
-					local chs = tinst:GetChildren()
+					local chs = GetChildren(tinst)
 					local found = nil
 					for j = 1, #chs do
-						if chs[j]:HasTag(constants.CoreTag) and arr[i] == chs[j].Name then
+						if HasTag(chs[j], constants.CoreTag) and arr[i] == chs[j].Name then
 							found = chs[j]
 							break
 						end
@@ -529,7 +586,7 @@ function main_module.CreateModule(config, name, level, permissions)
 					end
 				end
 				if typeof(tinst[arr[#arr]]) == "Instance" or typeof(tinst[arr[#arr]]) == "RBXScriptSignal" then
-					return module.Wrap(tinst[arr[#arr]])
+					return Wrap(tinst[arr[#arr]])
 				else
 					return tinst[arr[#arr]]
 				end
@@ -541,7 +598,7 @@ function main_module.CreateModule(config, name, level, permissions)
 						storage.Events[inst] = setmetatable({}, {__mode = "kv"})
 					end
 					if msettings.AutoWrapCustomMembers then
-						storage.Events[inst][key] = module.Wrap(wrapper.dict[key].reference(this))
+						storage.Events[inst][key] = Wrap(wrapper.dict[key].reference(this))
 					else
 						storage.Events[inst][key] = wrapper.dict[key].reference(this)
 					end
@@ -555,7 +612,7 @@ function main_module.CreateModule(config, name, level, permissions)
 			else
 				ret = module.FindFirstChildAndIgnoreLockedTag(inst, key)
 			end
-			if ret then return module.Wrap(ret) end
+			if ret then return Wrap(ret) end
 		end
 
 		error(key .. " is not a valid member of " .. wrapper.values.class_name .. " \"" .. inst.Name .. "\"", 0)
@@ -564,8 +621,9 @@ function main_module.CreateModule(config, name, level, permissions)
 	local SetProperty = nil
 
 	if plugins.Handler and plugins.Handler.SetProperty then
+		local SP = plugins.Handler.SetProperty
 		SetProperty = function(inst, key, value)
-			plugins.Handler.SetProperty(inst, key, value, player)
+			SP(inst, key, value, player)
 		end
 	else
 		SetProperty = function(inst, key, value)
@@ -575,8 +633,9 @@ function main_module.CreateModule(config, name, level, permissions)
 
 	local SetCallback = nil
 	if plugins.Handler and plugins.Handler.SetCallback then
+		local SC = plugins.Handler.SetCallback
 		SetCallback = function(inst, key, value)
-			plugins.Handler.SetCallback(inst, key, value, player)
+			SC(inst, key, value, player)
 		end
 	else
 		SetCallback = function(inst, key, value)
@@ -587,21 +646,15 @@ function main_module.CreateModule(config, name, level, permissions)
 	local function NewIndexWrapper(this, wrapper, inst, key, value)
 		if wrapper.dict[key] then
 			local value_type = module.typeof(value)
-			local required = inst:GetAttribute(msettings.RequiredPermissionAttribute)
+			local required = GetAttribute(inst, msettings.RequiredPermissionAttribute)
 			if type(required) == "string" and not module.permissions[required] then
 				error("Error: Permission " .. required .. " is required to index this Instance", 0)
 			elseif wrapper.dict[key].type == enum.instance.members.properties or wrapper.dict[key].type == enum.instance.members.write_only_properties then
 				local v = type(GetProperty(inst, key)) .. ":" .. typeof(GetProperty(inst, key))
 				if data_type_wrappers[v] and data_type_wrappers[v].verify then
-					data_type_wrappers[v].verify(GetProperty(inst, key), module.Unwrap(value))
+					data_type_wrappers[v].verify(GetProperty(inst, key), Unwrap(value))
 				end
-				if typeof(value) == msettings.WrapperDataType and getmetatable(value) == constants.InstanceIdentifier then
-					SetProperty(inst, key, value.GetWrapperObject(script))
-				elseif typeof(value) == msettings.WrapperDataType and module.GetCustomType(value) then
-					SetProperty(inst, key, value.GetWrapperObject(script))
-				else
-					SetProperty(inst, key, value)
-				end
+				SetProperty(inst, key, Unwrap(value))
 			elseif wrapper.dict[key].type == enum.instance.members.custom_properties then
 				if wrapper.dict[key].reference.write and typeof(wrapper.dict[key].reference.write) == "function" then
 					if wrapper.dict[key].reference.type and wrapper.dict[key].reference.type ~= "any" and value_type ~= wrapper.dict[key].reference.type and not (wrapper.dict[key].reference.type == "Instance" and value_type == "nil") then
@@ -616,30 +669,30 @@ function main_module.CreateModule(config, name, level, permissions)
 			elseif wrapper.dict[key].type == enum.instance.members.callbacks then
 				if typeof(value) == "function" then
 					SetCallback(inst, key, function(...)
-						local args = table.pack(...)
-						value(table.unpack(module.Wrap(args)))
+						local args = table_pack(...)
+						value(table_unpack(Wrap(args)))
 					end)
 					return
 				else
 					error("Unable to assign callback " .. key .. ". Function expected, got " .. value_type, 0)
 				end
 			elseif wrapper.dict[key].type == enum.instance.members.attribute_properties then
-				if typeof(inst:GetAttribute(msettings.AttributePropertyPrefix .. key)) == "nil" and wrapper.dict[key].reference.strict then
+				if typeof(GetAttribute(inst, msettings.AttributePropertyPrefix .. key)) == "nil" and wrapper.dict[key].reference.strict then
 					error("The " .. key .. " property of " .. wrapper.values.class_name .. " \"" .. inst.Name .. "\" is locked", 0)
 				elseif value_type == wrapper.dict[key].reference.type or (wrapper.dict[key].reference.type == "any" and enum.attribute.types[value_type]) then
-					inst:SetAttribute(msettings.AttributePropertyPrefix .. key, value)
+					SetAttribute(inst, msettings.AttributePropertyPrefix .. key, value)
 				else
 					error("Unable to assign property " .. key .. ". " .. wrapper.dict[key].reference.type .. " expected, got " .. value_type, 0)
 				end
 			elseif wrapper.dict[key].type == enum.instance.members.core_properties or wrapper.dict[key].type == enum.instance.members.write_only_properties then
 				--Deprecated feature.
-				local arr = string.split(wrapper.dict[key].reference, ".")
+				local arr = string_split(wrapper.dict[key].reference, ".")
 				local tinst = inst
 				for i = 1, #arr - 1 do
-					local chs = tinst:GetChildren()
+					local chs = GetChildren(tinst)
 					local found = nil
 					for j = 1, #chs do
-						if chs[j]:HasTag(constants.CoreTag) and arr[i] == chs[j].Name then
+						if HasTag(chs[j], constants.CoreTag) and arr[i] == chs[j].Name then
 							found = chs[j]
 							break
 						end
@@ -650,15 +703,15 @@ function main_module.CreateModule(config, name, level, permissions)
 						error("Internal error. Unable to locate " .. wrapper.dict[key].reference, 0)
 					end
 				end
-				if typeof(value) == msettings.WrapperDataType and getmetatable(value) == constants.InstanceIdentifier then
-					tinst[arr[#arr]] = value.GetWrapperObject(script)
+				if typeof(value) == msettings.WrapperDataType and getmetatable(value) == instance_identifier then
+					tinst[arr[#arr]] = Unwrap(value)
 				else
 					tinst[arr[#arr]] = value
 				end
 			end
 			return true
 		else
-			error(key .. " is not a valid member of " .. (msettings.CustomClassAttribute and inst:GetAttribute(msettings.CustomClassAttribute) or inst.ClassName) .. " \"" .. inst.Name .. "\"", 0)
+			error(key .. " is not a valid member of " .. (msettings.CustomClassAttribute and GetAttribute(inst, msettings.CustomClassAttribute) or inst.ClassName) .. " \"" .. inst.Name .. "\"", 0)
 		end
 	end
 
@@ -739,15 +792,15 @@ function main_module.CreateModule(config, name, level, permissions)
 	end
 
 	function module.WrapEnv(custom_env)
-		local env = custom_env or table.clone(env)
+		local env = custom_env or table_clone(env)
 		for key, value in pairs(env) do
-			env[key] = module.Wrap(env[key])
+			env[key] = Wrap(env[key])
 		end
 		return env
 	end
 
 	function module.MakeSecureEnv(sc) --The sc argument is for passing the current script so it can be wrapped. For those who wish to simulate script sources themselves.
-		local this_env = getfenv(debug.info(2, "f"))
+		local this_env = getfenv(debug_info(1, "f"))
 		local ret = {}
 		local keys_to_secure = {}
 		for key, value in pairs(env) do
@@ -758,20 +811,20 @@ function main_module.CreateModule(config, name, level, permissions)
 			elseif value:lower() == "default" then
 				ret[key] = local_default_aliases[key] --Finish this later
 			elseif value:lower() == "wrap" then
-				ret[key] = module.Wrap(this_env[key])
-			elseif string.sub(value, 1, 10):lower() == "use_alias:" then
-				ret[key] = aliases[string.sub(value, 11, (#value - 10) + 11)]
-			elseif string.sub(value, 1, 12):lower() == "use_default:" then
-				ret[key] = local_default_aliases[string.sub(value, 13, (#value - 12) + 13)]
+				ret[key] = Wrap(this_env[key])
+			elseif string_sub(value, 1, 10):lower() == "use_alias:" then
+				ret[key] = aliases[string_sub(value, 11, (#value - 10) + 11)]
+			elseif string_sub(value, 1, 12):lower() == "use_default:" then
+				ret[key] = local_default_aliases[string_sub(value, 13, (#value - 12) + 13)]
 			elseif value:lower() == "secure_function" then
 				ret[key] = aliases[key]
-				table.insert(keys_to_secure, key)
+				table_insert(keys_to_secure, key)
 			else
 				error("Unknown env enum type \"" .. tostring(value) .. "\"", 0)
 			end
 		end
-		if sc then ret.script = module.Wrap(sc) end
-		--ret = table.clone(ret)
+		if sc then ret.script = Wrap(sc) end
+		--ret = table_clone(ret)
 		for i = 1, #keys_to_secure do
 			local callback = ret[keys_to_secure[i]]
 			ret[keys_to_secure[i]] = function(...)
@@ -781,49 +834,53 @@ function main_module.CreateModule(config, name, level, permissions)
 		return ret
 	end
 
-	function module.CreateWrapperFunctionTunnel(callback, ...)
-		local args = table.pack(...)
+	local function CreateWrapperFunctionTunnel(callback, ...)
+		local args = table_pack(...)
 		for i = 1, #args do
-			args[i] = module.Unwrap(args[i])
+			args[i] = Unwrap(args[i])
 		end
-		args = table.pack(callback(table.unpack(args)))
+		args = table_pack(callback(table_unpack(args)))
 		for i = 1, #args do
-			args[i] = module.Wrap(args[i])
+			args[i] = Wrap(args[i])
 		end
-		return table.unpack(args)
+		return table_unpack(args)
 	end
+	
+	module.CreateWrapperFunctionTunnel = CreateWrapperFunctionTunnel
 
-	function module.CreateReverseWrapperFunctionTunnel(callback, ...)
-		local args = table.pack(...)
+	local function CreateReverseWrapperFunctionTunnel(callback, ...)
+		local args = table_pack(...)
 		for i = 1, #args do
-			args[i] = module.Wrap(args[i])
+			args[i] = Wrap(args[i])
 		end
-		args = table.pack(callback(table.unpack(args)))
+		args = table_pack(callback(table_unpack(args)))
 		for i = 1, #args do
-			args[i] = module.Unwrap(args[i])
+			args[i] = Unwrap(args[i])
 		end
-		return table.unpack(args)
+		return table_unpack(args)
 	end
+	
+	module.CreateReverseWrapperFunctionTunnel = CreateReverseWrapperFunctionTunnel
 
 	local function HandleWrapperEvent(callback)
 		return function(...)
-			local args = table.pack(...)
+			local args = table_pack(...)
 			for i = 1, #args do
-				args[i] = module.Wrap(args[i])
+				args[i] = Wrap(args[i])
 			end
-			args = table.pack(callback(table.unpack(args)))
+			args = table_pack(callback(table_unpack(args)))
 			for i = 1, #args do
-				args[i] = module.Unwrap(args[i])
+				args[i] = Unwrap(args[i])
 			end
-			return table.unpack(args)
+			return table_unpack(args)
 		end
 	end
 
 	local function IndexEvent(inst, key)
-		if key == "GetWrapperObject" and api_enabled then
+		if api_enabled and key == "GetWrapperObject" then
 			--Use this to get the real event of a wrapper.
 			return function(verification)
-				if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+				if typeof(verification) == "Instance" and IsA(verification, "LuaSourceContainer") then
 					return inst
 				end
 			end
@@ -857,6 +914,8 @@ function main_module.CreateModule(config, name, level, permissions)
 		end
 	end
 
+	local CheckIfWrapped = nil
+
 	local function CreateInstanceWrapper(inst)
 		if constants.RootClass and typeof(wrappers[constants.RootClass]) == "Instance" then
 			wrappers[constants.RootClass] = require(wrappers[constants.RootClass])
@@ -870,7 +929,7 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 		end
 		local wrapper = constants.RootClass and wrappers[constants.RootClass]
-		local cn = inst:GetAttribute(msettings.CustomClassAttribute)
+		local cn = GetAttribute(inst, msettings.CustomClassAttribute)
 		if typeof(cn) ~= "string" then
 			cn = inst.ClassName
 		end
@@ -944,8 +1003,8 @@ function main_module.CreateModule(config, name, level, permissions)
 							wrapper.dict[key] = {
 								type = enum.instance.members[properties_string],
 								reference = function(...)
-									local args = table.pack(...)
-									if #args == 0 or not module.CheckIfWrapped(args[1]) or module.typeof(args[1]) ~= "Instance" then
+									local args = table_pack(...)
+									if #args == 0 or not CheckIfWrapped(args[1]) or module.typeof(args[1]) ~= "Instance" then
 										error(invalid_method_self, 0)
 									end
 									local lcn = args[1].ClassName
@@ -953,7 +1012,7 @@ function main_module.CreateModule(config, name, level, permissions)
 										error(invalid_method_self, 0)
 									end
 									if msettings.AutoWrapCustomMembers then
-										return module.Wrap(temp_wrapper[properties_string][key](...))
+										return Wrap(temp_wrapper[properties_string][key](...))
 									else
 										return temp_wrapper[properties_string][key](...)
 									end
@@ -974,15 +1033,15 @@ function main_module.CreateModule(config, name, level, permissions)
 							wrapper.dict[value] = {
 								type = enum.instance.members[properties_string],
 								reference = function(...)
-									local args = table.pack(...)
-									if #args == 0 or not module.CheckIfWrapped(args[1]) or module.typeof(args[1]) ~= "Instance" then
+									local args = table_pack(...)
+									if #args == 0 or not CheckIfWrapped(args[1]) or module.typeof(args[1]) ~= "Instance" then
 										error(invalid_method_self, 0)
 									end
 									local lcn = args[1].ClassName
 									if not storage.Schemas[lcn] or (lcn ~= class_name and not table.find(storage.Schemas[lcn].values.inherits_from, class_name)) then
 										error(invalid_method_self, 0)
 									end
-									return module.CreateWrapperFunctionTunnel(method, ...)
+									return CreateWrapperFunctionTunnel(method, ...)
 								end
 							}
 						end
@@ -1030,7 +1089,7 @@ function main_module.CreateModule(config, name, level, permissions)
 					temp_name = temp_wrapper.inherits_from
 					temp_wrapper = wrappers[temp_wrapper.inherits_from]
 					class_name = temp_name
-					table.insert(wrapper.values.inherits_from, temp_name)
+					table_insert(wrapper.values.inherits_from, temp_name)
 				elseif type(temp_wrapper.inherits_from) == "string" then
 					warn("Attempted to inherit from a non-existant wrapper. (" .. temp_wrapper.inherits_from .. ")")
 				else
@@ -1054,12 +1113,12 @@ function main_module.CreateModule(config, name, level, permissions)
 	local function CleanupInstanceStorage(inst)
 		storage.Instances[inst] = nil
 		if type(storage.Events[inst]) == "table" then
-			table.clear(storage.Events[inst])
+			table_clear(storage.Events[inst])
 			storage.Events[inst] = nil
 		end
 	end
 
-	function module.Wrap(inst, table_cache)
+	Wrap = function(inst, table_cache)
 		local value_type = typeof(inst)
 		if proxy_dict and proxy_dict[inst] and value_type == msettings.WrapperDataType then
 			return inst
@@ -1073,7 +1132,7 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 			return t
 		elseif value_type == "Instance" then
-			if inst:HasTag(constants.LockedTag) or inst:HasTag(constants.HiddenTag) or (type(msettings.WhitelistedTag) == "string" and not inst:HasTag(msettings.WhitelistedTag)) then
+			if HasTag(inst, locked_tag) or HasTag(inst, hidden_tag) or (type(msettings.WhitelistedTag) == "string" and not HasTag(inst, msettings.WhitelistedTag)) then
 				--error("Fatal error: " .. inst.Name .. " is restricted.", 0)
 				--Return nil because sometimes the Player is nil in Studio.
 				return nil
@@ -1094,11 +1153,15 @@ function main_module.CreateModule(config, name, level, permissions)
 				t = {}
 				m = {}
 				setmetatable(t, m)
-				m.__eq = TableEqualHandler
+				if needs_equal_handler then
+					m.__eq = TableEqualHandler
+				end
 			elseif msettings.WrapperDataType == "userdata" then
 				t = newproxy(true)
 				m = getmetatable(t)
-				m.__eq = UserDataEqualHandler
+				if needs_equal_handler then
+					m.__eq = UserDataEqualHandler
+				end
 			end
 			m.__index = function(this, key)
 				--Store the rest in an outside function to save memory.
@@ -1108,15 +1171,17 @@ function main_module.CreateModule(config, name, level, permissions)
 			m.__newindex = function(this, key, value)
 				NewIndexWrapper(this, wrapper, inst, key, value)
 			end
+			--[[
 			m.__gc = function()
 				CleanupInstanceStorage(inst)
-				table.clear(m)
+				table_clear(m)
 				if connection and connection.Connected then
 					connection:disconnect()
 					connection = nil
 				end
 			end
-			m.__metatable = constants.InstanceIdentifier
+			--]]
+			m.__metatable = instance_identifier
 			m.__tostring = function(table)
 				if inst then
 					return inst.Name
@@ -1142,11 +1207,15 @@ function main_module.CreateModule(config, name, level, permissions)
 				t = {}
 				m = {}
 				setmetatable(t, m)
-				m.__eq = TableEqualHandler
+				if needs_equal_handler then
+					m.__eq = TableEqualHandler
+				end
 			elseif msettings.WrapperDataType == "userdata" then
 				t = newproxy(true)
 				m = getmetatable(t)
-				m.__eq = UserDataEqualHandler
+				if needs_equal_handler then
+					m.__eq = UserDataEqualHandler
+				end
 			end
 			m.__index = function(_, key)
 				return IndexEvent(inst, key)
@@ -1158,7 +1227,7 @@ function main_module.CreateModule(config, name, level, permissions)
 			m.__gc = function()
 				storage.EventWrappers[inst] = nil
 			end
-			m.__metatable = constants.EventIdentifier
+			m.__metatable = event_identifier
 			storage.EventWrappers[inst] = t
 			if proxy_dict then
 				proxy_dict[t] = inst
@@ -1174,21 +1243,25 @@ function main_module.CreateModule(config, name, level, permissions)
 					t = {}
 					m = {}
 					setmetatable(t, m)
-					m.__eq = TableEqualHandler
+					if needs_equal_handler then
+						m.__eq = TableEqualHandler
+					end
 				elseif msettings.WrapperDataType == "userdata" then
 					t = newproxy(true)
 					m = getmetatable(t)
-					m.__eq = UserDataEqualHandler
+					if needs_equal_handler then
+						m.__eq = UserDataEqualHandler
+					end
 				end
 				m.__call = function(_, ...)
-					return module.CreateWrapperFunctionTunnel(inst, ...)
+					return CreateWrapperFunctionTunnel(inst, ...)
 				end
 				if api_enabled then
 					m.__index = function(this, key)
 						if key == "GetWrapperObject" and not msettings.DisableAPIFunctions then
 							--Use this to get the real function of a wrapper.
 							return function(verification)
-								if typeof(verification) == "Instance" and verification:IsA("LuaSourceContainer") then
+								if typeof(verification) == "Instance" and IsA(verification, "LuaSourceContainer") then
 									return inst
 								end
 							end
@@ -1206,19 +1279,19 @@ function main_module.CreateModule(config, name, level, permissions)
 				m.__gc = function()
 					storage.Functions[inst] = nil
 				end
-				m.__metatable = constants.FunctionIdentifier
+				m.__metatable = function_identifier
 				storage.Functions[inst] = t
 				if proxy_dict then
 					proxy_dict[t] = inst
 				end
 				return t
 			end
-		elseif value_type == "table" and (msettings.WrapperDataType ~= "table" or (metatable ~= constants.InstanceIdentifier and metatable ~= constants.EventIdentifier and metatable ~= constants.FunctionIdentifier or string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix)) then
+		elseif value_type == "table" and (msettings.WrapperDataType ~= "table" or (metatable ~= instance_identifier and metatable ~= event_identifier and metatable ~= function_identifier or string_sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix)) then
 			if type(table_cache) == "table" and table_cache[inst] then
 				--print("circular table detected >:(")
 				return table_cache[inst]
 			end
-			local t = table.clone(inst)
+			local t = table_clone(inst)
 			local beginning = false
 			if type(table_cache) ~= "table" then
 				table_cache = {}
@@ -1226,10 +1299,10 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 			table_cache[inst] = t
 			for key, value in pairs(t) do
-				t[key] = module.Wrap(value, table_cache)
+				t[key] = Wrap(value, table_cache)
 			end
 			if beginning then
-				table.clear(table_cache)
+				table_clear(table_cache)
 				table_cache = nil
 			end
 			return t
@@ -1237,12 +1310,17 @@ function main_module.CreateModule(config, name, level, permissions)
 			return inst
 		end
 	end
+	
+	module.Wrap = Wrap
 
-	function module.Unwrap(t, reverse_wrap_functions, table_cache)
+	local ReverseWrap = nil
+	local GetCustomType = nil
+
+	Unwrap = function(t, reverse_wrap_functions, table_cache)
 		local value_type = typeof(t)
 		local metatable = getmetatable(t)
-		if value_type == msettings.WrapperDataType and (metatable == constants.InstanceIdentifier or metatable == constants.EventIdentifier or metatable == constants.FunctionIdentifier or string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix) and t.GetWrapperObject then
-			return proxy_dict and proxy_dict[t] or api_enabled and t.GetWrapperObject(script)
+		if value_type == msettings.WrapperDataType and (metatable == instance_identifier or metatable == event_identifier or metatable == function_identifier or string_sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix) and t.GetWrapperObject then
+			return proxy_dict and proxy_dict[t] or api_enabled and proxy_dict[t] or t.GetWrapperObject(script)
 		elseif value_type == "table" then
 			if type(getmetatable(t)) ~= "nil" then
 				--Security against malicious user-created metatables.
@@ -1253,7 +1331,7 @@ function main_module.CreateModule(config, name, level, permissions)
 				--print("circular table detected >:(")
 				return table_cache[t]
 			end
-			local t2 = table.clone(t)
+			local t2 = table_clone(t)
 			local beginning = false
 			if type(table_cache) ~= "table" then
 				table_cache = {}
@@ -1261,30 +1339,32 @@ function main_module.CreateModule(config, name, level, permissions)
 			end
 			table_cache[t] = t2
 			for key, value in pairs(t2) do
-				t2[key] = module.Unwrap(value, reverse_wrap_functions, table_cache)
+				t2[key] = Unwrap(value, reverse_wrap_functions, table_cache)
 			end
 			if beginning then
-				table.clear(table_cache)
+				table_clear(table_cache)
 				table_cache = nil
 			end
 			return t2
 		elseif value_type == "function" and reverse_wrap_functions then
-			return module.ReverseWrap(t)
-		elseif value_type == msettings.WrapperDataType and module.GetCustomType(t) then
-			return proxy_dict and proxy_dict[t] or api_enabled and t.GetWrapperObject(script)
+			return ReverseWrap(t)
+		elseif value_type == msettings.WrapperDataType and GetCustomType(t) then
+			return proxy_dict and proxy_dict[t] or api_enabled and proxy_dict[t] or t.GetWrapperObject(script)
 		else
 			return t
 		end
 	end
+	
+	module.Unwrap = Unwrap
 
-	function module.ReverseWrap(inst)
+	ReverseWrap = function(inst)
 		--Reverse wrap is to be used when a function is passed to an instance method as a callback. We don't want the game to be sending real instances to a callback...
 		if typeof(inst) == "function" then
 			if storage.ReverseFunctions[inst] then
 				return storage.ReverseFunctions[inst]
 			else
 				storage.ReverseFunctions[inst] = function(...)
-					return module.CreateReverseWrapperFunctionTunnel(inst, ...)
+					return CreateReverseWrapperFunctionTunnel(inst, ...)
 				end
 				return storage.ReverseFunctions[inst]
 			end
@@ -1292,17 +1372,19 @@ function main_module.CreateModule(config, name, level, permissions)
 			return inst
 		end
 	end
+	
+	module.ReverseWrap = ReverseWrap
 
 	function module.WrapEvent(event)
 		--Deprecated function. Here only for backwards compatibility.
-		return module.Wrap(event)
+		return Wrap(event)
 	end
-
-	function module.UnwrapIfWrapped(t)
+	
+	local UnwrapIfWrapped = function(t)
 		if typeof(t) == msettings.WrapperDataType then
 			local metatable = getmetatable(t)
-			if module.CheckIfWrapped(t) then
-				return t.GetWrapperObject(script)
+			if CheckIfWrapped(t) then
+				return proxy_dict[t] or t.GetWrapperObject(script)
 			else
 				return t
 			end
@@ -1310,35 +1392,41 @@ function main_module.CreateModule(config, name, level, permissions)
 			return t
 		end
 	end
+	
+	module.UnwrapIfWrapped = UnwrapIfWrapped
 
-	function module.CheckIfWrapped(t)
+	CheckIfWrapped = function(t)
 		if typeof(t) == msettings.WrapperDataType then
 			local metatable = getmetatable(t)
-			if (metatable == constants.InstanceIdentifier or metatable == constants.EventIdentifier or metatable == constants.FunctionIdentifier or string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix) and t.GetWrapperObject then
+			if (metatable == instance_identifier or metatable == event_identifier or metatable == function_identifier or string_sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix) then
 				return true
 			end
 		end
 		return false
 	end
+	
+	module.CheckIfWrapped = CheckIfWrapped
 
-	function module.GetCustomType(t)
+	GetCustomType = function(t)
 		if typeof(t) == msettings.WrapperDataType then
 			local metatable = getmetatable(t)
-			if string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
-				local parts = string.split(metatable, ":")
+			if string_sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
+				local parts = string_split(metatable, ":")
 				if parts[2] and parts[3] then
 					return parts[2] .. ":" .. parts[3]
 				end
 			end
 		end
 	end
+	
+	module.GetCustomType = GetCustomType
 
 	function module.CallConstructor(callback, ...)
-		local args = table.pack(...)
+		local args = table_pack(...)
 		for i = 1, #args do
-			args[i] = module.UnwrapIfWrapped(args[i])
+			args[i] = UnwrapIfWrapped(args[i])
 		end
-		return callback(table.unpack(args))
+		return callback(table_unpack(args))
 	end
 
 	function module.typeof(obj)
@@ -1346,14 +1434,14 @@ function main_module.CreateModule(config, name, level, permissions)
 		if value_type == msettings.WrapperDataType then
 			local metatable = getmetatable(obj)
 			if type(metatable) == "string" then
-				if metatable == module.constants.InstanceIdentifier then
+				if metatable == instance_identifier then
 					value_type = "Instance"
-				elseif metatable == module.constants.EventIdentifier then
+				elseif metatable == event_identifier then
 					value_type = "RBXScriptSignal"
-				elseif metatable == module.constants.FunctionIdentifier then
+				elseif metatable == function_identifier then
 					value_type = "function"
-				elseif string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
-					value_type = string.split(metatable, ":")[3]
+				elseif string_sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
+					value_type = string_split(metatable, ":")[3]
 				end
 			end
 		end
@@ -1365,12 +1453,12 @@ function main_module.CreateModule(config, name, level, permissions)
 		if value_type == msettings.WrapperDataType then
 			local metatable = getmetatable(obj)
 			if type(metatable) == "string" then
-				if metatable == module.constants.InstanceIdentifier or metatable == module.constants.EventIdentifier then
+				if metatable == instance_identifier or metatable == event_identifier then
 					value_type = "userdata"
-				elseif metatable == module.constants.FunctionIdentifier then
+				elseif metatable == function_identifier then
 					value_type = "function"
-				elseif string.sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
-					value_type = string.split(metatable, ":")[2]
+				elseif string_sub(metatable, 1, #msettings.CustomTypePrefix) == msettings.CustomTypePrefix then
+					value_type = string_split(metatable, ":")[2]
 				end
 			end
 		end
@@ -1381,11 +1469,12 @@ function main_module.CreateModule(config, name, level, permissions)
 		local found = inst:FindFirstChild(key)
 		if not found then
 			return nil
-		elseif found:HasTag(constants.LockedTag) or found:HasTag(constants.HiddenTag) then
-			local children = inst:GetChildren()
+		elseif HasTag(found, locked_tag) or HasTag(found, hidden_tag) then
+			local children = GetChildren(inst)
 			for i = 1, #children do
-				if children[i] and children[i].Name == key and not children[i]:HasTag(constants.LockedTag) and not children[i]:HasTag(constants.HiddenTag) then
-					return children[i]
+				local child = children[i]
+				if child and child.Name == key and not HasTag(child, locked_tag) and not HasTag(child, hidden_tag) then
+					return child
 				end
 			end
 		else
@@ -1397,11 +1486,12 @@ function main_module.CreateModule(config, name, level, permissions)
 		local found = inst:FindFirstChildOfClass(key)
 		if not found then
 			return nil
-		elseif found:HasTag(constants.LockedTag) or found:HasTag(constants.HiddenTag) then
-			local children = inst:GetChildren()
+		elseif HasTag(found, locked_tag) or HasTag(found, hidden_tag) then
+			local children = GetChildren(inst)
 			for i = 1, #children do
-				if children[i] and children[i].ClassName == key and not children[i]:HasTag(constants.LockedTag) and not children[i]:HasTag(constants.HiddenTag) then
-					return children[i]
+				local child = children[i]
+				if child and child.ClassName == key and not HasTag(child, locked_tag) and not HasTag(child, hidden_tag) then
+					return child
 				end
 			end
 		else
@@ -1413,11 +1503,12 @@ function main_module.CreateModule(config, name, level, permissions)
 		local found = inst:FindFirstDescendant(key)
 		if not found then
 			return nil
-		elseif found:HasTag(constants.LockedTag) or found:HasTag(constants.HiddenTag) then
-			local children = inst:GetDescendants()
+		elseif HasTag(found, locked_tag) or HasTag(found, hidden_tag) then
+			local children = GetDescendants(inst)
 			for i = 1, #children do
-				if children[i] and children[i].Name == key and not children[i]:HasTag(constants.LockedTag) and not children[i]:HasTag(constants.HiddenTag) then
-					return children[i]
+				local child = children[i]
+				if child and child.Name == key and not HasTag(child, locked_tag) and not HasTag(child, hidden_tag) then
+					return child
 				end
 			end
 		else
@@ -1429,9 +1520,9 @@ function main_module.CreateModule(config, name, level, permissions)
 		if not timeout then
 			timeout = 0
 		end
-		local old_time = os.clock()
+		local old_time = os_clock()
 		local found = module.FindFirstChildAndIgnoreLockedTag(inst, key)
-		while not found and (not timeout or (os.clock() - old_time > timeout)) do
+		while not found and (not timeout or (os_clock() - old_time > timeout)) do
 			runservice.Heartbeat:Wait()
 			found = module.FindFirstChildAndIgnoreLockedTag(inst, key)
 		end
@@ -1443,11 +1534,12 @@ function main_module.CreateModule(config, name, level, permissions)
 		local found = inst:FindFirstDescendant(key)
 		if not found then
 			return nil
-		elseif found:HasTag(constants.LockedTag) then
-			local children = inst:GetDescendants()
+		elseif HasTag(found, locked_tag) then
+			local children = GetDescendants(inst)
 			for i = 1, #children do
-				if children[i] and children[i].Name == key and not children[i]:HasTag(constants.LockedTag) and not children[i]:HasTag(constants.HiddenTag) then
-					return children[i]
+				local child = children[i]
+				if child and child.Name == key and not HasTag(child, locked_tag) and not HasTag(child, hidden_tag) then
+					return child
 				end
 			end
 		else
@@ -1492,16 +1584,7 @@ function main_module.CreateModule(config, name, level, permissions)
 		local_default_aliases[key] = value(module)
 	end
 
-	--Was using this to test the garbage collection.
-	--[[
-	task.spawn(function()
-		while task.wait(10) do
-			print(storage)
-		end
-	end)
-	--]]
-
-	return table.freeze(module)
+	return table_freeze(module)
 end
 
 function FunctionIndexCallback(_, key)
@@ -1510,11 +1593,11 @@ end
 
 function EqualHandler(a, b, dt)
 	local metatable_a = getmetatable(a)
-	if typeof(a) == dt and (metatable_a == constants.InstanceIdentifier or metatable_a == constants.EventIdentifier or metatable_a == constants.FunctionIdentifier) then
+	if typeof(a) == dt and (metatable_a == instance_identifier or metatable_a == event_identifier or metatable_a == function_identifier) then
 		a = a.GetWrapperObject(script)
 	end
 	local metatable_b = getmetatable(b)
-	if typeof(b) == dt and (metatable_b == constants.InstanceIdentifier or metatable_b == constants.EventIdentifier or metatable_b == constants.FunctionIdentifier) then
+	if typeof(b) == dt and (metatable_b == instance_identifier or metatable_b == event_identifier or metatable_b == function_identifier) then
 		b = b.GetWrapperObject(script)
 	end
 	if typeof(a) ~= typeof(b) then
