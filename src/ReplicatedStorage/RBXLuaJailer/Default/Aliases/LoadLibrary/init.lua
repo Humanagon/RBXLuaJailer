@@ -11,6 +11,7 @@ for i = 1, #children do
 	libraries[children[i].Name] = require(children[i])
 end
 
+library = nil
 table.clear(children)
 children = nil
 
